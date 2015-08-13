@@ -1,0 +1,11 @@
+#!/usr/bin/env ruby
+
+unless ARGV.size == 1
+  puts "usage: #{File.basename(__FILE__)} <config>"
+  exit(1)
+end
+
+require 'delayed_job_worker_pool'
+
+options = DelayedJobWorkerPool::DSL.load(ARGV[0])
+DelayedJobWorkerPool::WorkerPool.new(options).run
