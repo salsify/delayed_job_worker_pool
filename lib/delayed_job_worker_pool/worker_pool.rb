@@ -108,7 +108,7 @@ module DelayedJobWorkerPool
 
       invoke_callback(:on_worker_boot)
 
-      DelayedJobWorkerPool::Worker.run
+      DelayedJobWorkerPool::Worker.run(worker_options)
     rescue => e
       log("Worker failed with error: #{e.message}\n#{e.backtrace.join("\n")}")
       exit(1)
@@ -123,7 +123,7 @@ module DelayedJobWorkerPool
     end
 
     def worker_options
-      options.except(:workers, :preload_app)
+      options.except(:workers, :preload_app, :before_worker_boot, :on_worker_boot, :after_worker_boot)
     end
 
     def log(message)
