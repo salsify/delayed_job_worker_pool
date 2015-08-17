@@ -8,7 +8,7 @@ describe DelayedJobWorkerPool::Application do
     end
 
     it "raises an exception when the application file is not present" do
-      expect { DelayedJobWorkerPool::Application.load }.to raise_error
+      expect { DelayedJobWorkerPool::Application.load }.to raise_error(/environment\.rb/)
     end
   end
 end
