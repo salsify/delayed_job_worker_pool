@@ -42,10 +42,8 @@ describe DelayedJobWorkerPool do
   it_behaves_like 'runs jobs on active queues'
 
   it 'invokes after_preload_app, on_worker_boot, and after_worker_boot callbacks' do
-    wait_for_children_booted
-    worker_pid = child_worker_pids.first
-
     wait_for_num_log_lines(master_callback_log, 2)
+    worker_pid = child_worker_pids.first
     expect(parse_callback_log(master_callback_log)).to eq [
         { callback: 'after_preload_app', pid: @master_pid },
         { callback: 'after_worker_boot', pid: @master_pid, worker_pid: worker_pid }
