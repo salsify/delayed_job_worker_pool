@@ -8,9 +8,11 @@
 [travis]: http://travis-ci.org/salsify/delayed_job_worker_pool
 [codeclimate]: https://codeclimate.com/github/salsify/delayed_job_worker_pool
 
-[Delayed Job's](https://github.com/collectiveidea/delayed_job) built-in worker pooling daemonizes all worker processes. This is great for certain environments but not so great for environments like Heroku that really want your processes to run in the foreground. Delayed Job Worker Pool runs a pool of Delayed Job workers **without** daemonizing them. [Salsify](http://salsify.com) is currently using this to run multiple Delayed Job workers on a single Heroku PX dyno.
+[Delayed Job's](https://github.com/collectiveidea/delayed_job) built-in worker pooling daemonizes all worker processes. This is great for certain environments but not so great for environments like Heroku that really want your processes to run in the foreground. Delayed Job Worker Pool runs a pool of Delayed Job workers **without** daemonizing them.
+
+[Salsify](http://salsify.com) is currently using Delayed Job Worker Pool to run multiple Delayed Job workers on a single Heroku PX dyno. Read more about our experience using this gem on our [blog](http://blog.salsify.com/engineering/delayed-job-worker-pooling).
  
-This gem only works with MRI on Linux/MacOS X.
+**This gem only works with MRI on Linux/MacOS X.**
 
 ## Installation
 
