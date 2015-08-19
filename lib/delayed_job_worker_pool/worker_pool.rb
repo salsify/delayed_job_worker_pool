@@ -11,16 +11,15 @@ module DelayedJobWorkerPool
 
       install_signal_handlers
 
-      load_app if preload_app?
-
-      invoke_callback(:before_worker_boot)
+      if preload_app?
+        load_app
+        invoke_callback(:after_preload_app)
+      end
 
       log_uninheritable_threads
 
       create_master_alive_pipe
       num_workers.times { fork_worker }
-
-      invoke_callback(:after_worker_boot)
 
       monitor_workers
 
@@ -81,18 +80,20 @@ module DelayedJobWorkerPool
 
         log("Worker #{worker_pid} exited with status #{status.to_i}")
         worker_pids.delete(worker_pid)
+        invoke_callback(:after_worker_shutdown, worker_pid)
         fork_worker unless shutting_down
       end
     end
 
-    def invoke_callback(callback_name)
-      options[callback_name].call if options[callback_name]
+    def invoke_callback(callback_name, *args)
+      options[callback_name].call(*args) if options[callback_name]
     end
 
     def fork_worker
       worker_pid = Kernel.fork { run_worker }
       worker_pids << worker_pid
       log("Started worker #{worker_pid}")
+      invoke_callback(:after_worker_boot, worker_pid)
     end
 
     def run_worker

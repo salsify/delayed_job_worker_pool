@@ -13,6 +13,8 @@ describe DelayedJobWorkerPool do
   end
 
   before do |example|
+    FileUtils.remove_dir(jobs_dir, force: true)
+    FileUtils.makedirs(jobs_dir)
     @master_pid = start_worker_pool(example, config_file)
   end
 
@@ -39,6 +41,22 @@ describe DelayedJobWorkerPool do
 
   it_behaves_like 'runs jobs on active queues'
 
+  it 'invokes after_preload_app, on_worker_boot, and after_worker_boot callbacks' do
+    wait_for_children_booted
+    worker_pid = child_worker_pids.first
+
+    wait_for_num_log_lines(master_callback_log, 2)
+    expect(parse_callback_log(master_callback_log)).to eq [
+        { callback: 'after_preload_app', pid: @master_pid },
+        { callback: 'after_worker_boot', pid: @master_pid, worker_pid: worker_pid }
+    ]
+
+    wait_for_num_log_lines(worker_callback_log, 1)
+    expect(parse_callback_log(worker_callback_log)).to eq [
+        { callback: 'on_worker_boot', pid: worker_pid }
+    ]
+  end
+
   context 'when the app is not preloaded' do
     let(:config_file) { config_file_path('postload_app.rb') }
 
@@ -47,23 +65,31 @@ describe DelayedJobWorkerPool do
 
   context 'when children fail' do
     before do
-      Wait.for('children started') do
-        child_worker_pids.present?
-      end
+      wait_for_children_booted
+
+      @killed_worker_pids = child_worker_pids
 
       # Kill the initially booted workers so the master will restart them
-      child_worker_pids.each do |child_worker_pid|
+      @killed_worker_pids.each do |child_worker_pid|
         kill_process(child_worker_pid, 'KILL')
       end
+
+      wait_for_children_booted
     end
 
     it_behaves_like 'runs jobs on active queues'
+
+    it 'invokes after_worker_shutdown callbacks' do
+      wait_for_num_log_lines(master_callback_log, 4)
+      callback_messages = parse_callback_log(master_callback_log)
+      @killed_worker_pids.each do |killed_worker_pid|
+        expect(callback_messages).to include(callback: 'after_worker_shutdown', pid: @master_pid, worker_pid: killed_worker_pid)
+      end
+    end
   end
 
   it 'exits workers if the master process dies' do
-    Wait.for('children started') do
-      child_worker_pids.present?
-    end
+    wait_for_children_booted
 
     orphaned_pids = child_worker_pids
 
@@ -84,6 +110,18 @@ describe DelayedJobWorkerPool do
       log_worker_pool_output(example, pid, stdout_err)
     end
     pid
+  end
+
+  def wait_for_children_booted
+    Wait.for('children started') do
+      child_worker_pids.present?
+    end
+  end
+
+  def wait_for_num_log_lines(log, num_lines)
+    Wait.for("#{log} contains #{num_lines} lines") do
+      File.exists?(log) && IO.readlines(log).size == num_lines
+    end
   end
 
   def child_worker_pids
@@ -136,7 +174,21 @@ describe DelayedJobWorkerPool do
     env['NUM_WORKERS'] = num_workers.to_s if num_workers
     env['QUEUES'] = queues.join(',') if queues
     env['RAILS_ENV'] = 'development'
+    env['MASTER_CALLBACK_LOG'] = master_callback_log
+    env['WORKER_CALLBACK_LOG'] = worker_callback_log
     env
+  end
+
+  def parse_callback_log(file)
+    IO.readlines(file).map { |line| JSON.parse(line).symbolize_keys }
+  end
+
+  def master_callback_log
+    File.expand_path(File.join(jobs_dir, 'master_callbacks.log'))
+  end
+
+  def worker_callback_log
+    File.expand_path(File.join(jobs_dir, 'worker_callbacks.log'))
   end
 
   def jobs_dir

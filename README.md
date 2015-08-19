@@ -45,22 +45,26 @@ sleep_delay ENV['WORKER_SLEEP_DELAY']
 
 preload_app
 
-before_worker_boot do
-  puts 'Master about to start forking children'
+after_preload_app do
+  puts "Master #{Process.pid} preloaded app"
+  
+  # Don't hang on to database connections from the master after we've completed initialization
+  ActiveRecord::Base.connection_pool.disconnect!
 end
 
-before on_worker_boot do
+on_worker_boot do
   puts "Worker #{Process.pid} started"
   
   # Reconnect to the database
   ActiveRecord::Base.establish_connection
 end
 
-after_worker_boot do
-  puts 'Master booted children'
-  
-  # Don't hang on to database connections from the master after we've completed initialization
-  ActiveRecord::Base.connection_pool.disconnect!
+after_worker_boot do |worker_pid|
+  puts "Master #{Process.pid} booted worker #{worker_pid}"
+end
+
+after_worker_shutdown do |worker_pid|
+  puts "Master #{Process.pid} detected dead worker #{worker_pid}"
 end
 ```
 
@@ -69,9 +73,10 @@ Here's more information on each setting:
 * `workers` - The number of Delayed Job worker processes to fork. The master process will relaunch workers that fail.
 * Delayed Job worker settings (`queues`, `min_priority`, `max_priority`, `sleep_delay`, `read_ahead`) - These are passed through to the Delayed Job worker.
 * `preload_app` - This forces the master process to load Rails before forking worker processes causing the memory consumed by the code to be shared between workers. **If you use this setting make sure you re-establish any necessary connections in the on_worker_boot callback.**
-* `before_worker_boot` - A callback that runs in the master process before forking any workers.
+* `after_preload_app` - A callback that runs in the master process after preloading the app but before forking any workers.
 * `on_worker_boot` - A callback that runs in the worker process after it has been forked.
-* `after_worker_boot` - A callback that runs in the master process after the initial set of workers have been forked.
+* `after_worker_boot` - A callback that runs in the master process after a worker has been forked.
+* `after_worker_shutdown` - A callback that runs in the master process after a worker has been shutdown.
 
 All settings are optional and nil values are ignored. 
 
