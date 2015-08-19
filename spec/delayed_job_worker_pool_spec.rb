@@ -13,14 +13,15 @@ describe DelayedJobWorkerPool do
   end
 
   before do |example|
-    FileUtils.remove_dir(jobs_dir, force: true)
+    FileUtils.remove_dir(jobs_dir, true)
     FileUtils.makedirs(jobs_dir)
     @master_pid = start_worker_pool(example, config_file)
   end
 
   after do
     kill_process(@master_pid)
-    FileUtils.remove_dir(jobs_dir, force: true)
+    wait_for_process_terminated(@master_pid)
+    FileUtils.remove_dir(jobs_dir, true)
   end
 
   shared_examples 'runs jobs on active queues' do
@@ -73,13 +74,15 @@ describe DelayedJobWorkerPool do
 
   context 'when children fail' do
     before do
+      # Wait until all of the children have started
       wait_for_children_booted
-
       @killed_worker_pids = child_worker_pids
+      wait_for_num_log_lines(master_callback_log, 1 + @killed_worker_pids.size)
 
       # Kill the initially booted workers so the master will restart them
       @killed_worker_pids.each do |child_worker_pid|
         kill_process(child_worker_pid, 'KILL')
+        wait_for_process_terminated(child_worker_pid)
       end
 
       wait_for_children_booted
@@ -88,7 +91,8 @@ describe DelayedJobWorkerPool do
     it_behaves_like 'runs jobs on active queues'
 
     it 'invokes after_worker_shutdown callbacks' do
-      wait_for_num_log_lines(master_callback_log, 4)
+      wait_for_num_log_lines(master_callback_log, 1 + 3 * @killed_worker_pids.size)
+
       callback_messages = parse_callback_log(master_callback_log)
       @killed_worker_pids.each do |killed_worker_pid|
         expect(callback_messages).to include({
@@ -154,6 +158,12 @@ describe DelayedJobWorkerPool do
     true
   rescue Errno::ESRCH
     false
+  end
+
+  def wait_for_process_terminated(pid)
+    Wait.for('process terminated') do
+      !process_alive?(pid)
+    end
   end
 
   def queue_create_file_job(file, queue: nil)
