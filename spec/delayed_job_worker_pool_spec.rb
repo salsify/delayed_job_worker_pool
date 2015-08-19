@@ -136,9 +136,17 @@ describe DelayedJobWorkerPool do
   end
 
   def wait_for_num_log_lines(log, num_lines)
+    log_contents = []
     Wait.for("#{log} contains #{num_lines} lines") do
-      File.exists?(log) && IO.readlines(log).size == num_lines
+      if File.exists?(log)
+        log_contents = IO.readlines(log)
+        log_contents.size == num_lines
+      else
+        false
+      end
     end
+  rescue Timeout::Error => e
+    raise Timeout::Error.new("#{e.message}. Log contents:\n#{log_contents.join}")
   end
 
   def expected_worker_name(worker_pid)
