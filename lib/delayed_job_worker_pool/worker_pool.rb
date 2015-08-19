@@ -80,7 +80,7 @@ module DelayedJobWorkerPool
 
         log("Worker #{worker_pid} exited with status #{status.to_i}")
         worker_pids.delete(worker_pid)
-        invoke_callback(:after_worker_shutdown, worker_pid)
+        invoke_callback(:after_worker_shutdown, worker_info(worker_pid))
         fork_worker unless shutting_down
       end
     end
@@ -93,7 +93,7 @@ module DelayedJobWorkerPool
       worker_pid = Kernel.fork { run_worker }
       worker_pids << worker_pid
       log("Started worker #{worker_pid}")
-      invoke_callback(:after_worker_boot, worker_pid)
+      invoke_callback(:after_worker_boot, worker_info(worker_pid))
     end
 
     def run_worker
@@ -107,12 +107,20 @@ module DelayedJobWorkerPool
 
       load_app unless preload_app?
 
-      invoke_callback(:on_worker_boot)
+      invoke_callback(:on_worker_boot, worker_info(Process.pid))
 
-      DelayedJobWorkerPool::Worker.run(worker_options)
+      DelayedJobWorkerPool::Worker.run(worker_options(Process.pid))
     rescue => e
       log("Worker failed with error: #{e.message}\n#{e.backtrace.join("\n")}")
       exit(1)
+    end
+
+    def worker_info(worker_pid)
+      DelayedJobWorkerPool::WorkerInfo.new(name: worker_name(worker_pid), process_id: worker_pid)
+    end
+
+    def worker_name(worker_pid)
+      "host:#{Socket.gethostname} pid:#{worker_pid}"
     end
 
     def num_workers
@@ -123,8 +131,8 @@ module DelayedJobWorkerPool
       options.fetch(:preload_app, false)
     end
 
-    def worker_options
-      options.except(:workers, :preload_app, :before_worker_boot, :on_worker_boot, :after_worker_boot)
+    def worker_options(worker_pid)
+      options.except(:workers, :preload_app, *DelayedJobWorkerPool::DSL::CALLBACK_SETTINGS).merge(name: worker_name(worker_pid))
     end
 
     def log(message)

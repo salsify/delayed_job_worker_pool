@@ -46,12 +46,22 @@ describe DelayedJobWorkerPool do
     worker_pid = child_worker_pids.first
     expect(parse_callback_log(master_callback_log)).to eq [
         { callback: 'after_preload_app', pid: @master_pid },
-        { callback: 'after_worker_boot', pid: @master_pid, worker_pid: worker_pid }
+        {
+            callback: 'after_worker_boot',
+            pid: @master_pid,
+            worker_pid: worker_pid,
+            worker_name: expected_worker_name(worker_pid)
+        }
     ]
 
     wait_for_num_log_lines(worker_callback_log, 1)
     expect(parse_callback_log(worker_callback_log)).to eq [
-        { callback: 'on_worker_boot', pid: worker_pid }
+        {
+            callback: 'on_worker_boot',
+            pid: worker_pid,
+            worker_pid: worker_pid,
+            worker_name: expected_worker_name(worker_pid)
+        }
     ]
   end
 
@@ -81,7 +91,12 @@ describe DelayedJobWorkerPool do
       wait_for_num_log_lines(master_callback_log, 4)
       callback_messages = parse_callback_log(master_callback_log)
       @killed_worker_pids.each do |killed_worker_pid|
-        expect(callback_messages).to include(callback: 'after_worker_shutdown', pid: @master_pid, worker_pid: killed_worker_pid)
+        expect(callback_messages).to include({
+            callback: 'after_worker_shutdown',
+            pid: @master_pid,
+            worker_pid: killed_worker_pid,
+            worker_name: expected_worker_name(killed_worker_pid)
+        })
       end
     end
   end
@@ -120,6 +135,10 @@ describe DelayedJobWorkerPool do
     Wait.for("#{log} contains #{num_lines} lines") do
       File.exists?(log) && IO.readlines(log).size == num_lines
     end
+  end
+
+  def expected_worker_name(worker_pid)
+    "host:#{Socket.gethostname} pid:#{worker_pid}"
   end
 
   def child_worker_pids
