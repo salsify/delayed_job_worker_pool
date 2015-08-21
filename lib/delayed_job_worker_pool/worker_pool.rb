@@ -1,8 +1,13 @@
 module DelayedJobWorkerPool
   class WorkerPool
+    SIGNALS = ['TERM', 'INT'].map(&:freeze).freeze
+
     def initialize(options = {})
       @options = options
       @worker_pids = []
+      @pending_signals = []
+      @pending_signal_read_pipe, @pending_signal_write_pipe = create_pipe(inheritable: false)
+      @master_alive_read_pipe, @master_alive_write_pipe = create_pipe(inheritable: true)
       self.shutting_down = false
     end
 
@@ -18,7 +23,6 @@ module DelayedJobWorkerPool
 
       log_uninheritable_threads
 
-      create_master_alive_pipe
       num_workers.times { fork_worker }
 
       monitor_workers
@@ -31,16 +35,22 @@ module DelayedJobWorkerPool
 
     private
 
-    attr_reader :options, :worker_pids, :master_alive_read_pipe, :master_alive_write_pipe
+    attr_reader :options, :worker_pids, :master_alive_read_pipe, :master_alive_write_pipe,
+                :pending_signals, :pending_signal_read_pipe, :pending_signal_write_pipe
     attr_accessor :shutting_down
 
     def install_signal_handlers
-      trap('TERM') do
-        shutdown('TERM')
+      SIGNALS.each do |signal|
+        trap(signal) do
+          pending_signals << signal
+          pending_signal_write_pipe.write_nonblock('.')
+        end
       end
+    end
 
-      trap('INT') do
-        shutdown('INT')
+    def uninstall_signal_handlers
+      SIGNALS.each do |signal|
+        trap(signal, 'DEFAULT')
       end
     end
 
@@ -53,10 +63,6 @@ module DelayedJobWorkerPool
           log("WARNING: Thread will not be inherited by workers: #{t.inspect}")
         end
       end
-    end
-
-    def create_master_alive_pipe
-      @master_alive_read_pipe, @master_alive_write_pipe = IO.pipe
     end
 
     def load_app
@@ -73,16 +79,32 @@ module DelayedJobWorkerPool
     end
 
     def monitor_workers
-      until worker_pids.empty?
-        worker_pid, status = Process.wait2
-
-        next unless worker_pids.include?(worker_pid)
-
-        log("Worker #{worker_pid} exited with status #{status.to_i}")
-        worker_pids.delete(worker_pid)
-        invoke_callback(:after_worker_shutdown, worker_info(worker_pid))
-        fork_worker unless shutting_down
+      while has_workers?
+        if has_pending_signal?
+          shutdown(pending_signals.pop)
+        elsif (wait_result = Process.wait2(-1, Process::WNOHANG))
+          handle_dead_worker(wait_result.first, wait_result.last)
+        else
+          wait_for_signal(1)
+        end
       end
+    end
+
+    def handle_dead_worker(worker_pid, status)
+      return unless worker_pids.include?(worker_pid)
+
+      log("Worker #{worker_pid} exited with status #{status.to_i}")
+      worker_pids.delete(worker_pid)
+      invoke_callback(:after_worker_shutdown, worker_info(worker_pid))
+      fork_worker unless shutting_down
+    end
+
+    def has_workers?
+      !worker_pids.empty?
+    end
+
+    def has_pending_signal?
+      !pending_signals.empty?
     end
 
     def invoke_callback(callback_name, *args)
@@ -98,6 +120,8 @@ module DelayedJobWorkerPool
 
     def run_worker
       master_alive_write_pipe.close
+
+      uninstall_signal_handlers
 
       Thread.new do
         IO.select([master_alive_read_pipe])
@@ -133,6 +157,31 @@ module DelayedJobWorkerPool
 
     def worker_options(worker_pid)
       options.except(:workers, :preload_app, *DelayedJobWorkerPool::DSL::CALLBACK_SETTINGS).merge(name: worker_name(worker_pid))
+    end
+
+    def create_pipe(inheritable: true)
+      read, write = IO.pipe
+      unless inheritable
+        make_file_descriptor_uninheritable(read)
+        make_file_descriptor_uninheritable(write)
+      end
+      [read, write]
+    end
+
+    def make_file_descriptor_uninheritable(io)
+      io.fcntl(Fcntl::F_SETFD)
+    end
+
+    def wait_for_signal(timeout)
+      if IO.select([pending_signal_read_pipe], [], [], timeout)
+        drain_pipe(pending_signal_read_pipe)
+      end
+    end
+
+    def drain_pipe(pipe)
+      loop { pipe.read_nonblock(16) }
+    rescue IO::WaitReadable
+      # We've drained the pipe
     end
 
     def log(message)

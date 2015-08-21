@@ -9,18 +9,18 @@ describe DelayedJobWorkerPool do
   let(:config_file) { config_file_path('preload_app.rb') }
 
   before(:all) do
+    FileUtils.makedirs(log_dir)
     setup_test_app_database
   end
 
   before do |example|
     FileUtils.remove_dir(jobs_dir, true)
     FileUtils.makedirs(jobs_dir)
-    @master_pid = start_worker_pool(example, config_file)
+    start_worker_pool(example, config_file)
   end
 
   after do
-    kill_process(@master_pid)
-    wait_for_process_terminated(@master_pid)
+    shutdown_worker_pool
     FileUtils.remove_dir(jobs_dir, true)
   end
 
@@ -43,13 +43,16 @@ describe DelayedJobWorkerPool do
   it_behaves_like 'runs jobs on active queues'
 
   it 'invokes after_preload_app, on_worker_boot, and after_worker_boot callbacks' do
-    wait_for_num_log_lines(master_callback_log, 2)
-    worker_pid = child_worker_pids.first
+    worker_pids = wait_for_children_booted
+    expect(worker_pids.size).to eq 1
+
+    wait_for_num_log_lines(master_callback_log, 1 + worker_pids.size)
+    worker_pid = worker_pids.first
     expect(parse_callback_log(master_callback_log)).to eq [
-        { callback: 'after_preload_app', pid: @master_pid },
+        { callback: 'after_preload_app', pid: master_pid },
         {
             callback: 'after_worker_boot',
-            pid: @master_pid,
+            pid: master_pid,
             worker_pid: worker_pid,
             worker_name: expected_worker_name(worker_pid)
         }
@@ -75,29 +78,29 @@ describe DelayedJobWorkerPool do
   context 'when children fail' do
     before do
       # Wait until all of the children have started
-      wait_for_children_booted
-      @killed_worker_pids = child_worker_pids
-      wait_for_num_log_lines(master_callback_log, 1 + @killed_worker_pids.size)
+      worker_pids = wait_for_children_booted
+      wait_for_num_log_lines(master_callback_log, 1 + worker_pids.size)
 
       # Kill the initially booted workers so the master will restart them
-      @killed_worker_pids.each do |child_worker_pid|
+      worker_pids.each do |child_worker_pid|
         kill_process(child_worker_pid, 'KILL')
         wait_for_process_terminated(child_worker_pid)
       end
 
-      wait_for_children_booted
+      @killed_worker_pids = worker_pids
     end
 
     it_behaves_like 'runs jobs on active queues'
 
     it 'invokes after_worker_shutdown callbacks' do
+      wait_for_children_booted
       wait_for_num_log_lines(master_callback_log, 1 + 3 * @killed_worker_pids.size)
 
       callback_messages = parse_callback_log(master_callback_log)
       @killed_worker_pids.each do |killed_worker_pid|
         expect(callback_messages).to include({
             callback: 'after_worker_shutdown',
-            pid: @master_pid,
+            pid: master_pid,
             worker_pid: killed_worker_pid,
             worker_name: expected_worker_name(killed_worker_pid)
         })
@@ -106,33 +109,52 @@ describe DelayedJobWorkerPool do
   end
 
   it 'exits workers if the master process dies' do
-    wait_for_children_booted
+    worker_pids = wait_for_children_booted
 
-    orphaned_pids = child_worker_pids
+    kill_process(master_pid, 'KILL')
 
-    kill_process(@master_pid, 'KILL')
-
-    orphaned_pids.each do |orphaned_pid|
+    worker_pids.each do |worker_pid|
       Wait.for('child terminated') do
-        process_alive?(orphaned_pid)
+        process_alive?(worker_pid)
       end
     end
   end
 
   def start_worker_pool(example, config_file, num_workers: 1, queues: ['active'])
     env = worker_pool_env(num_workers: num_workers, queues: queues)
-    _, stdout_err, wait_thread = Open3.popen2e(env, 'delayed_job_worker_pool', config_file, chdir: test_app_root)
-    pid = wait_thread[:pid]
-    Thread.new do
-      log_worker_pool_output(example, pid, stdout_err)
+    stdin, @master_stdout_err, @master_thread = Open3.popen2e(env, 'delayed_job_worker_pool', config_file, chdir: test_app_root)
+    stdin.close
+    @master_log_thread = Thread.new do
+      log_worker_pool_output(example)
     end
-    pid
+  end
+
+  def shutdown_worker_pool
+    if process_alive?(master_pid)
+      kill_process(master_pid, 'TERM')
+      Process.wait(master_pid) rescue Errno::ECHILD
+    end
+
+    @master_stdout_err.close if @master_stdout_err
+
+    if @master_log_thread && !@master_log_thread.join(2)
+      puts 'WARNING: Failed to gracefully join master_log_thread'
+      @master_log_thread.raise(ThreadShutdownException.new)
+      @master_log_thread.join
+    end
+  end
+
+  def master_pid
+    @master_thread.pid
   end
 
   def wait_for_children_booted
+    pids = []
     Wait.for('children started') do
-      child_worker_pids.present?
+      pids = child_worker_pids
+      pids.present?
     end
+    pids
   end
 
   def wait_for_num_log_lines(log, num_lines)
@@ -154,11 +176,16 @@ describe DelayedJobWorkerPool do
   end
 
   def child_worker_pids
-    `pgrep -P #{@master_pid}`.split.map(&:to_i)
+    return [] unless File.exists?(worker_state_file)
+
+    state = IO.read(worker_state_file)
+    state.present? ? JSON.parse(state) : []
   end
 
   def kill_process(pid, signal = 'TERM')
     Process.kill(signal, pid)
+  rescue Errno::ESRCH
+    puts "WARNING: Process #{pid} already killed"
   end
 
   def process_alive?(pid)
@@ -169,7 +196,7 @@ describe DelayedJobWorkerPool do
   end
 
   def wait_for_process_terminated(pid)
-    Wait.for('process terminated') do
+    Wait.for("process #{pid} terminated") do
       !process_alive?(pid)
     end
   end
@@ -194,14 +221,15 @@ describe DelayedJobWorkerPool do
     end
   end
 
-  def log_worker_pool_output(example, pid, io)
-    FileUtils.makedirs('log')
-    File.open("log/worker-pool-#{pid}.log", 'w') do |log|
+  def log_worker_pool_output(example)
+    File.open(File.join(log_dir, "worker-pool-#{master_pid}.log"), 'w') do |log|
       log.puts("Worker pool output for #{example.location}")
-      while line = io.gets
-        log.puts(line)
-      end
+      IO.copy_stream(@master_stdout_err, log)
     end
+  rescue ThreadShutdownException
+    # We're being forcefully shutdown
+  rescue => e
+    puts "WARNING: Log thread failed: #{e.class} - #{e.message}\n#{e.backtrace.join("\n")}"
   end
 
   def worker_pool_env(num_workers: nil, queues: nil)
@@ -211,6 +239,7 @@ describe DelayedJobWorkerPool do
     env['RAILS_ENV'] = 'development'
     env['MASTER_CALLBACK_LOG'] = master_callback_log
     env['WORKER_CALLBACK_LOG'] = worker_callback_log
+    env['WORKER_STATE_FILE'] = worker_state_file
     env
   end
 
@@ -224,6 +253,14 @@ describe DelayedJobWorkerPool do
 
   def worker_callback_log
     File.expand_path(File.join(jobs_dir, 'worker_callbacks.log'))
+  end
+
+  def worker_state_file
+    File.expand_path(File.join(jobs_dir, 'worker_state.json'))
+  end
+
+  def log_dir
+    File.expand_path(File.join('tmp', 'log'))
   end
 
   def jobs_dir
@@ -242,4 +279,5 @@ describe DelayedJobWorkerPool do
     File.expand_path(File.join('spec', 'dummy'))
   end
 
+  ThreadShutdownException = Class.new(StandardError)
 end
