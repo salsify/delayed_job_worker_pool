@@ -40,7 +40,7 @@ delayed_job_worker_pool <config file>
 
 The config file is a Ruby DSL inspired by the [Puma](https://github.com/puma/puma) configuration DSL. Here's an example:
 
-```
+```ruby
 workers Integer(ENV['NUM_WORKERS'] || 1)
 queues (ENV['QUEUES'] || ENV['QUEUE'] || '').split(',')
 sleep_delay ENV['WORKER_SLEEP_DELAY']
