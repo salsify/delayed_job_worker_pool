@@ -50,7 +50,7 @@ describe DelayedJobWorkerPool::DSL do
     end
 
     def process_dsl(input)
-      Tempfile.create('dsl') do |file|
+      Tempfile.open('dsl') do |file|
         file.write(input)
         file.close
         DelayedJobWorkerPool::DSL.load(file.path)
