@@ -1,3 +1,5 @@
+require 'fcntl'
+
 module DelayedJobWorkerPool
   class WorkerPool
     SIGNALS = ['TERM', 'INT'].map(&:freeze).freeze
