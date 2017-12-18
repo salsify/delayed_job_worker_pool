@@ -74,7 +74,6 @@ module DelayedJobWorkerPool
 
     def load_app
       DelayedJobWorkerPool::Application.load
-      Rails.application.eager_load!
     end
 
     def shutdown(signal)
