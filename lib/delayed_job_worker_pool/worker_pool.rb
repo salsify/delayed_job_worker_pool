@@ -9,8 +9,8 @@ module DelayedJobWorkerPool
       @worker_pids = []
       @worker_pid_opts = {}
       @pending_signals = []
-      @pending_signal_read_pipe, @pending_signal_write_pipe = create_pipe(inheritable: false)
-      @master_alive_read_pipe, @master_alive_write_pipe = create_pipe(inheritable: true)
+      @pending_signal_read_pipe, @pending_signal_write_pipe = create_pipe(false)
+      @master_alive_read_pipe, @master_alive_write_pipe = create_pipe
       self.shutting_down = false
     end
 
@@ -172,7 +172,7 @@ module DelayedJobWorkerPool
       opts.except(:workers, :preload_app, :pooled_queues, *DelayedJobWorkerPool::DSL::CALLBACK_SETTINGS).merge(name: worker_name(worker_pid))
     end
 
-    def create_pipe(inheritable: true)
+    def create_pipe(inheritable=true)
       read, write = IO.pipe
       unless inheritable
         make_file_descriptor_uninheritable(read)
