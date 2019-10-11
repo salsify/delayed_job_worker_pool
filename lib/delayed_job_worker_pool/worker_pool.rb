@@ -1,4 +1,5 @@
 require 'fcntl'
+require 'socket'
 
 module DelayedJobWorkerPool
   class WorkerPool
