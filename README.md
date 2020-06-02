@@ -41,9 +41,11 @@ delayed_job_worker_pool <config file>
 The config file is a Ruby DSL inspired by the [Puma](https://github.com/puma/puma) configuration DSL. Here's an example:
 
 ```ruby
-workers Integer(ENV['NUM_WORKERS'] || 1)
-queues (ENV['QUEUES'] || ENV['QUEUE'] || '').split(',')
-sleep_delay ENV['WORKER_SLEEP_DELAY']
+worker_group do |g|
+  g.workers = Integer(ENV['NUM_WORKERS'] || 1)
+  g.queues = (ENV['QUEUES'] || ENV['QUEUE'] || '').split(',')
+  g.sleep_delay = ENV['WORKER_SLEEP_DELAY']
+end
 
 preload_app
 
@@ -77,10 +79,26 @@ after_worker_shutdown do |worker_info|
 end
 ```
 
+You can configure multiple worker groups, i.e.:
+
+```
+worker_group(:default) do |g|
+  g.workers = 1
+  g.queues = ['default']
+end
+
+worker_group(:mails) do |g|
+  g.workers = 1
+  g.queues = ['mail]
+end
+
+```
+
 Here's more information on each setting:
 
-* `workers` - The number of Delayed Job worker processes to fork. The master process will relaunch workers that fail.
-* Delayed Job worker settings (`queues`, `min_priority`, `max_priority`, `sleep_delay`, `read_ahead`) - These are passed through to the Delayed Job worker.
+* `worker_group` - You need at least one worker group. Group settings can be set as illustrated above. Worker group settings:
+  * `workers` - The number of Delayed Job worker processes to fork. The master process will relaunch workers that fail.
+  * Delayed Job worker settings (`queues`, `min_priority`, `max_priority`, `sleep_delay`, `read_ahead`) - These are passed through to the Delayed Job worker.
 * `preload_app` - This forces the master process to load Rails before forking worker processes causing the memory consumed by the code to be shared between workers. **If you use this setting make sure you re-establish any necessary connections in the on_worker_boot callback.**
 * `after_preload_app` - A callback that runs in the master process after preloading the app but before forking any workers.
 * `on_worker_boot` - A callback that runs in the worker process after it has been forked.
@@ -89,10 +107,14 @@ Here's more information on each setting:
 
 All settings are optional and nil values are ignored. 
 
+## Upgrading from v0.2.x
+
+* Convert your worker settings to a single worker group (see _Usage_)
+* Please note the delayed job worker names changed to include ` group: <group_name>`, e.g. if you are monitoring them by their name
+
 ## Contributing
 
 Bug reports and pull requests are welcome on GitHub at https://github.com/salsify/delayed_job_worker_pool.
-
 
 ## License
 

@@ -1,6 +1,8 @@
-workers Integer(ENV.fetch('NUM_WORKERS', 1))
-queues ENV.fetch('QUEUES', '').split(',')
-sleep_delay 0.1
+worker_group(:default) do |g|
+  g.workers = Integer(ENV.fetch('NUM_WORKERS', 1))
+  g.queues = ENV.fetch('QUEUES', '').split(',')
+  g.sleep_delay = 0.1
+end
 
 preload_app
 
@@ -10,7 +12,13 @@ worker_state_file = ENV.fetch('WORKER_STATE_FILE')
 
 def write_callback_log(log, callback, worker_info = nil)
   payload = { callback: callback, pid: Process.pid }
-  payload.merge!(worker_pid: worker_info.process_id, worker_name: worker_info.name) if worker_info
+  if worker_info
+    payload.merge!(
+      worker_pid: worker_info.process_id,
+      worker_name: worker_info.name,
+      worker_group: worker_info.worker_group
+    )
+  end
   IO.write(log, "#{payload.to_json}\n", mode: 'a')
 end
 

@@ -3,11 +3,13 @@ require 'socket'
 
 module DelayedJobWorkerPool
   class WorkerPool
+
     SIGNALS = ['TERM', 'INT'].map(&:freeze).freeze
+    DEFAULT_WORKER_COUNT = 1
 
     def initialize(options = {})
       @options = options
-      @worker_pids = []
+      @registry = Registry.new
       @pending_signals = []
       @pending_signal_read_pipe, @pending_signal_write_pipe = create_pipe(inheritable: false)
       @master_alive_read_pipe, @master_alive_write_pipe = create_pipe(inheritable: true)
@@ -26,7 +28,7 @@ module DelayedJobWorkerPool
 
       log_uninheritable_threads
 
-      num_workers.times { fork_worker }
+      fork_workers
 
       monitor_workers
 
@@ -38,7 +40,7 @@ module DelayedJobWorkerPool
 
     private
 
-    attr_reader :options, :worker_pids, :master_alive_read_pipe, :master_alive_write_pipe,
+    attr_reader :options, :registry, :master_alive_read_pipe, :master_alive_write_pipe,
                 :pending_signals, :pending_signal_read_pipe, :pending_signal_write_pipe
     attr_accessor :shutting_down
 
@@ -75,8 +77,9 @@ module DelayedJobWorkerPool
     def shutdown(signal)
       log("Shutting down master #{Process.pid} with signal #{signal}")
       self.shutting_down = true
-      worker_pids.each do |child_pid|
-        log("Telling worker #{child_pid} to shutdown with signal #{signal}")
+      registry.worker_pids.each do |child_pid|
+        group = registry.group(child_pid)
+        log("Telling worker #{child_pid} from group #{group} to shutdown with signal #{signal}")
         Process.kill(signal, child_pid)
       end
     end
@@ -94,16 +97,19 @@ module DelayedJobWorkerPool
     end
 
     def handle_dead_worker(worker_pid, status)
-      return unless worker_pids.include?(worker_pid)
+      return unless registry.include_worker?(worker_pid)
 
       log("Worker #{worker_pid} exited with status #{status.to_i}")
-      worker_pids.delete(worker_pid)
-      invoke_callback(:after_worker_shutdown, worker_info(worker_pid))
-      fork_worker unless shutting_down
+
+      group = registry.group(worker_pid)
+      invoke_callback(:after_worker_shutdown, worker_info(worker_pid, group))
+
+      registry.remove_worker(worker_pid)
+      fork_worker(group) unless shutting_down
     end
 
     def has_workers?
-      !worker_pids.empty?
+      registry.has_workers?
     end
 
     def has_pending_signal?
@@ -114,14 +120,26 @@ module DelayedJobWorkerPool
       options[callback_name].call(*args) if options[callback_name]
     end
 
-    def fork_worker
-      worker_pid = Kernel.fork { run_worker }
-      worker_pids << worker_pid
-      log("Started worker #{worker_pid}")
-      invoke_callback(:after_worker_boot, worker_info(worker_pid))
+    def fork_workers
+      options.fetch(:worker_groups).each do |name, group|
+        workers = group.workers || DEFAULT_WORKER_COUNT
+
+        registry.add_group(name, group.dj_worker_options)
+
+        workers.times { fork_worker(name) }
+      end
     end
 
-    def run_worker
+    def fork_worker(group)
+      worker_pid = Kernel.fork { run_worker(group) }
+      log("Started worker in group #{group}: #{worker_pid}")
+
+      registry.add_worker(group, worker_pid)
+
+      invoke_callback(:after_worker_boot, worker_info(worker_pid, group))
+    end
+
+    def run_worker(group)
       master_alive_write_pipe.close
 
       uninstall_signal_handlers
@@ -134,32 +152,32 @@ module DelayedJobWorkerPool
 
       load_app unless preload_app?
 
-      invoke_callback(:on_worker_boot, worker_info(Process.pid))
+      invoke_callback(:on_worker_boot, worker_info(Process.pid, group))
 
-      DelayedJobWorkerPool::Worker.run(worker_options(Process.pid))
+      DelayedJobWorkerPool::Worker.run(worker_options(Process.pid, group))
     rescue => e
       log("Worker failed with error: #{e.message}\n#{e.backtrace.join("\n")}")
       exit(1)
     end
 
-    def worker_info(worker_pid)
-      DelayedJobWorkerPool::WorkerInfo.new(name: worker_name(worker_pid), process_id: worker_pid)
+    def worker_info(worker_pid, group)
+      DelayedJobWorkerPool::WorkerInfo.new(
+        name: worker_name(worker_pid, group),
+        process_id: worker_pid,
+        worker_group: group
+      )
     end
 
-    def worker_name(worker_pid)
-      "host:#{Socket.gethostname} pid:#{worker_pid}"
-    end
-
-    def num_workers
-      options.fetch(:workers, 1)
+    def worker_name(worker_pid, group)
+      "host:#{Socket.gethostname} pid:#{worker_pid} group:#{group}"
     end
 
     def preload_app?
       options.fetch(:preload_app, false)
     end
 
-    def worker_options(worker_pid)
-      options.except(:workers, :preload_app, *DelayedJobWorkerPool::DSL::CALLBACK_SETTINGS).merge(name: worker_name(worker_pid))
+    def worker_options(worker_pid, group)
+      registry.options(group).merge(name: worker_name(worker_pid, group))
     end
 
     def create_pipe(inheritable: true)
