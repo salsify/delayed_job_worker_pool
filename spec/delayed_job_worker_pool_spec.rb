@@ -8,13 +8,14 @@ require 'delayed_job_active_record'
 require_relative 'dummy/app/jobs/touch_file_job'
 
 describe DelayedJobWorkerPool do
+  let(:shutdown_exception) { Class.new(StandardError) }
   let(:config_file) { config_file_path('preload_app.rb') }
   let(:worker_pool_env) do
     make_worker_pool_env
       .merge({ 'NUM_WORKERS' => '1', 'QUEUES' => 'active' })
   end
 
-  before(:all) do
+  before(:all) do # rubocop:disable RSpec/BeforeAfterAll
     FileUtils.makedirs(log_dir)
     setup_test_app_database
   end
@@ -157,7 +158,12 @@ describe DelayedJobWorkerPool do
   end
 
   def start_worker_pool(example, config_file, env)
-    stdin, @master_stdout_err, @master_thread = Open3.popen2e(env, 'delayed_job_worker_pool', config_file, chdir: test_app_root)
+    stdin, @master_stdout_err, @master_thread = Open3.popen2e(
+      env,
+      'delayed_job_worker_pool',
+      config_file,
+      chdir: test_app_root
+    )
     stdin.close
     @master_log_thread = Thread.new do
       log_worker_pool_output(example)
@@ -178,7 +184,7 @@ describe DelayedJobWorkerPool do
 
     if @master_log_thread && !@master_log_thread.join(2)
       puts 'WARNING: Failed to gracefully join master_log_thread'
-      @master_log_thread.raise(ThreadShutdownException.new)
+      @master_log_thread.raise(shutdown_exception.new)
       @master_log_thread.join
     end
   end
@@ -254,7 +260,7 @@ describe DelayedJobWorkerPool do
   end
 
   def setup_test_app_database
-    output, status = Open3.capture2e(make_worker_pool_env, 'rake db:drop && rake db:setup', chdir: test_app_root)
+    output, status = Open3.capture2e(make_worker_pool_env, 'rails db:reset', chdir: test_app_root)
     raise "Failed to setup test app database:\n#{output}" unless status.success?
   end
 
@@ -263,7 +269,7 @@ describe DelayedJobWorkerPool do
       log.puts("Worker pool output for #{example.location}")
       IO.copy_stream(@master_stdout_err, log)
     end
-  rescue ThreadShutdownException
+  rescue shutdown_exception
     # We're being forcefully shutdown
   rescue StandardError => e
     puts "WARNING: Log thread failed: #{e.class} - #{e.message}\n#{e.backtrace.join("\n")}"
@@ -313,6 +319,4 @@ describe DelayedJobWorkerPool do
   def test_app_root
     File.expand_path(File.join('spec', 'dummy'))
   end
-
-  ThreadShutdownException = Class.new(StandardError)
 end

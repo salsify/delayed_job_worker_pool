@@ -15,7 +15,7 @@ module DelayedJobWorkerPool
       worker_pids.include?(pid)
     end
 
-    def has_workers?
+    def workers?
       !worker_pids.empty?
     end
 

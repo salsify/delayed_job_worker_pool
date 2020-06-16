@@ -6,8 +6,8 @@ describe DelayedJobWorkerPool::Registry do
   let(:registry) { DelayedJobWorkerPool::Registry.new }
 
   context "empty registry" do
-    it '#has_workers?' do
-      expect(registry).not_to have_workers
+    it '#workers?' do
+      expect(registry).not_to be_workers
     end
 
     it "adds groups and workers" do
@@ -39,8 +39,8 @@ describe DelayedJobWorkerPool::Registry do
       )
     end
 
-    it '#has_workers?' do
-      expect(registry).to have_workers
+    it '#workers?' do
+      expect(registry).to be_workers
     end
 
     it '#include_worker?' do

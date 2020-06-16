@@ -66,7 +66,8 @@ module DelayedJobWorkerPool
         next if t == Thread.current
 
         if t.respond_to?(:backtrace)
-          log("WARNING: Thread will not be inherited by workers: #{t.inspect} - #{t.backtrace ? t.backtrace.first : ''}")
+          log("WARNING: Thread will not be inherited by workers: #{t.inspect} - " \
+              "#{t.backtrace ? t.backtrace.first : ''}")
         else
           log("WARNING: Thread will not be inherited by workers: #{t.inspect}")
         end
@@ -88,8 +89,8 @@ module DelayedJobWorkerPool
     end
 
     def monitor_workers
-      while has_workers?
-        if has_pending_signal?
+      while workers?
+        if pending_signal?
           shutdown(pending_signals.pop)
         elsif (wait_result = Process.wait2(-1, Process::WNOHANG))
           handle_dead_worker(wait_result.first, wait_result.last)
@@ -111,11 +112,11 @@ module DelayedJobWorkerPool
       fork_worker(group) unless shutting_down
     end
 
-    def has_workers?
-      registry.has_workers?
+    def workers?
+      registry.workers?
     end
 
-    def has_pending_signal?
+    def pending_signal?
       !pending_signals.empty?
     end
 
