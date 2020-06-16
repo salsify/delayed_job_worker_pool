@@ -17,7 +17,7 @@ Gem::Specification.new do |spec|
   spec.executables   = ['delayed_job_worker_pool']
   spec.require_paths = ['lib']
 
-  spec.required_ruby_version = '>= 2.0'
+  spec.required_ruby_version = '>= 2.5'
 
   spec.add_dependency 'delayed_job', ['>= 3.0', '< 4.2']
 
@@ -28,4 +28,5 @@ Gem::Specification.new do |spec|
   spec.add_development_dependency 'sqlite3', '>= 1.3'
   spec.add_development_dependency 'rails', '>= 4.2', '< 6'
   spec.add_development_dependency 'sprockets', '< 4'
+  spec.add_development_dependency 'salsify_rubocop', '0.85.0'
 end
