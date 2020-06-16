@@ -1,7 +1,10 @@
 # Changelog
 
-### 0.2.4 (unreleased)
-*
+### 0.3.0
+* Require Ruby 2.5 or higher.
+* Support for running multiple worker pools on a single node. 
+  See [#7](https://github.com/salsify/delayed_job_worker_pool/pull/7) for details.
+  Thanks to Severin Räz!
 
 ### 0.2.3
 * Explicitly require 'fcntl' to fix uninitialized constant IO::Fcntl. Thanks to Stefan Wrobel!
