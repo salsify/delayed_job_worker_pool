@@ -7,6 +7,10 @@ require_relative 'dummy/app/jobs/touch_file_job'
 
 describe DelayedJobWorkerPool do
   let(:config_file) { config_file_path('preload_app.rb') }
+  let(:worker_pool_env) do
+    make_worker_pool_env
+      .merge({'NUM_WORKERS' => '1', 'QUEUES' => 'active'})
+  end
 
   before(:all) do
     FileUtils.makedirs(log_dir)
@@ -16,7 +20,7 @@ describe DelayedJobWorkerPool do
   before do |example|
     FileUtils.remove_dir(jobs_dir, true)
     FileUtils.makedirs(jobs_dir)
-    start_worker_pool(example, config_file)
+    start_worker_pool(example, config_file, worker_pool_env)
   end
 
   after do
@@ -54,7 +58,8 @@ describe DelayedJobWorkerPool do
             callback: 'after_worker_boot',
             pid: master_pid,
             worker_pid: worker_pid,
-            worker_name: expected_worker_name(worker_pid)
+            worker_name: expected_worker_name(worker_pid),
+            worker_group: 'default'
         }
     ]
 
@@ -64,7 +69,8 @@ describe DelayedJobWorkerPool do
             callback: 'on_worker_boot',
             pid: worker_pid,
             worker_pid: worker_pid,
-            worker_name: expected_worker_name(worker_pid)
+            worker_name: expected_worker_name(worker_pid),
+            worker_group: 'default'
         }
     ]
   end
@@ -73,6 +79,33 @@ describe DelayedJobWorkerPool do
     let(:config_file) { config_file_path('postload_app.rb') }
 
     it_behaves_like 'runs jobs on active queues'
+  end
+
+  context 'multiple worker groups' do
+    let(:worker_pool_env) do
+      make_worker_pool_env.merge(
+        {
+          'QUEUES_GROUP_1' => first_group_queues,
+          'QUEUES_GROUP_2' => second_group_queues
+        }
+      )
+    end
+
+    let(:config_file) { config_file_path('multiple_groups.rb') }
+
+    context 'first group gets its options' do
+      let(:first_group_queues) { 'active' }
+      let(:second_group_queues) { 'other' }
+
+      it_behaves_like 'runs jobs on active queues'
+    end
+
+    context 'second group gets its options' do
+      let(:first_group_queues) { 'other' }
+      let(:second_group_queues) { 'active' }
+
+      it_behaves_like 'runs jobs on active queues'
+    end
   end
 
   context 'when children fail' do
@@ -102,7 +135,8 @@ describe DelayedJobWorkerPool do
             callback: 'after_worker_shutdown',
             pid: master_pid,
             worker_pid: killed_worker_pid,
-            worker_name: expected_worker_name(killed_worker_pid)
+            worker_name: expected_worker_name(killed_worker_pid),
+            worker_group: 'default'
         })
       end
     end
@@ -120,8 +154,7 @@ describe DelayedJobWorkerPool do
     end
   end
 
-  def start_worker_pool(example, config_file, num_workers: 1, queues: ['active'])
-    env = worker_pool_env(num_workers: num_workers, queues: queues)
+  def start_worker_pool(example, config_file, env)
     stdin, @master_stdout_err, @master_thread = Open3.popen2e(env, 'delayed_job_worker_pool', config_file, chdir: test_app_root)
     stdin.close
     @master_log_thread = Thread.new do
@@ -172,7 +205,7 @@ describe DelayedJobWorkerPool do
   end
 
   def expected_worker_name(worker_pid)
-    "host:#{Socket.gethostname} pid:#{worker_pid}"
+    "host:#{Socket.gethostname} pid:#{worker_pid} group:default"
   end
 
   def child_worker_pids
@@ -215,7 +248,7 @@ describe DelayedJobWorkerPool do
   end
 
   def setup_test_app_database
-    output, status = Open3.capture2e(worker_pool_env, 'rake db:drop && rake db:setup', chdir: test_app_root)
+    output, status = Open3.capture2e(make_worker_pool_env, 'rake db:drop && rake db:setup', chdir: test_app_root)
     unless status.success?
       raise "Failed to setup test app database:\n#{output}"
     end
@@ -232,10 +265,8 @@ describe DelayedJobWorkerPool do
     puts "WARNING: Log thread failed: #{e.class} - #{e.message}\n#{e.backtrace.join("\n")}"
   end
 
-  def worker_pool_env(num_workers: nil, queues: nil)
+  def make_worker_pool_env
     env = ENV.to_h
-    env['NUM_WORKERS'] = num_workers.to_s if num_workers
-    env['QUEUES'] = queues.join(',') if queues
     env['RAILS_ENV'] = 'development'
     env['MASTER_CALLBACK_LOG'] = master_callback_log
     env['WORKER_CALLBACK_LOG'] = worker_callback_log
