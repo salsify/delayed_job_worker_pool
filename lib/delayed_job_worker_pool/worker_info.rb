@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module DelayedJobWorkerPool
   class WorkerInfo
     attr_reader :process_id, :name, :worker_group

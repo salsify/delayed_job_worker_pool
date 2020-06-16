@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 class TouchFileJob < Struct.new(:file)
   def perform
     Rails.logger.info("Touching #{file}")

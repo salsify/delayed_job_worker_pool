@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'spec_helper'
 
 describe DelayedJobWorkerPool::WorkerGroupOptions do
@@ -11,7 +13,7 @@ describe DelayedJobWorkerPool::WorkerGroupOptions do
 
     expect(options.dj_worker_options).to eq({})
 
-    options.queues = %w[foo]
-    expect(options.dj_worker_options).to eq({ queues: %w[foo] })
+    options.queues = ['foo']
+    expect(options.dj_worker_options).to eq({ queues: ['foo'] })
   end
 end

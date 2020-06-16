@@ -1,4 +1,6 @@
-require File.expand_path('../boot', __FILE__)
+# frozen_string_literal: true
+
+require File.expand_path('boot', __dir__)
 
 require 'rails/all'
 
@@ -19,4 +21,3 @@ module Dummy
     # config.i18n.default_locale = :de
   end
 end
-

@@ -1,14 +1,16 @@
+# frozen_string_literal: true
+
 require 'spec_helper'
 
 describe DelayedJobWorkerPool::Registry do
   let(:registry) { DelayedJobWorkerPool::Registry.new }
 
-  context 'empty registry' do
-    it '#has_workers?' do
-      expect(registry.has_workers?).to be_falsey
+  context "empty registry" do
+    it '#workers?' do
+      expect(registry).not_to be_workers
     end
 
-    it 'adds groups and workers' do
+    it "adds groups and workers" do
       registry.add_group(:group_a, {})
       registry.add_worker(:group_a, 1)
       expect(registry.worker_pids).to eq([1])
@@ -21,7 +23,7 @@ describe DelayedJobWorkerPool::Registry do
     end
   end
 
-  context 'registry with workers' do
+  context "registry with workers" do
     before do
       registry.add_group(:group_a, { id: :options_a })
       registry.add_worker(:group_a, 1)
@@ -37,14 +39,14 @@ describe DelayedJobWorkerPool::Registry do
       )
     end
 
-    it '#has_workers?' do
-      expect(registry.has_workers?).to be_truthy
+    it '#workers?' do
+      expect(registry).to be_workers
     end
 
     it '#include_worker?' do
-      expect(registry.include_worker?(1)).to be_truthy
-      expect(registry.include_worker?(3)).to be_truthy
-      expect(registry.include_worker?(4)).to be_falsey
+      expect(registry).to be_include_worker(1)
+      expect(registry).to be_include_worker(3)
+      expect(registry).not_to be_include_worker(4)
     end
 
     it '#group' do
@@ -67,7 +69,7 @@ describe DelayedJobWorkerPool::Registry do
       )
     end
 
-    it 'removes workers' do
+    it "removes workers" do
       registry.remove_worker(1)
       expect(registry.worker_pids).to eq([2, 3])
       registry.remove_worker(3)

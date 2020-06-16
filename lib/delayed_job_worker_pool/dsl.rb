@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module DelayedJobWorkerPool
   class DSL
     class NoWorkerGroupsDefined < StandardError; end
@@ -25,10 +27,10 @@ module DelayedJobWorkerPool
       @options[:preload_app] = preload
     end
 
-    def worker_group(name = DEFAULT_WORKER_GROUP_NAME, &block)
+    def worker_group(name = DEFAULT_WORKER_GROUP_NAME)
       name_sym = name.to_sym
       if @options[:worker_groups].key?(name_sym)
-        raise NonUniqueGroupName, "Worker group name #{name_sym} is already in use"
+        raise NonUniqueGroupName.new("Worker group name #{name_sym} is already in use")
       end
 
       group_options = WorkerGroupOptions.new
@@ -39,8 +41,7 @@ module DelayedJobWorkerPool
     def assert_groups_defined!
       return unless @options[:worker_groups].empty?
 
-      raise NoWorkerGroupsDefined,
-            'No worker groups defined. Define groups using `worker_group`.'
+      raise NoWorkerGroupsDefined.new('No worker groups defined. Define groups using `worker_group`.')
     end
 
     CALLBACK_SETTINGS.each do |option_name|

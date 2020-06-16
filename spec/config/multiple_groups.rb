@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 worker_group(:group_1) do |g|
   g.workers = 1
   g.queues = ENV.fetch('QUEUES_GROUP_1').split(',')

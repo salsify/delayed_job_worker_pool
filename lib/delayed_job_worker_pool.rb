@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'delayed_job_worker_pool/application'
 require 'delayed_job_worker_pool/dsl'
 require 'delayed_job_worker_pool/registry'
