@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module DelayedJobWorkerPool
   module Application
     extend self
@@ -6,7 +8,7 @@ module DelayedJobWorkerPool
       require(base_application_filename)
     rescue LoadError
       raise "Could not find Rails initialization file #{full_application_filename}. " \
-            "Make sure delayed_job_worker_pool is run from the Rails root directory."
+            'Make sure delayed_job_worker_pool is run from the Rails root directory.'
     end
 
     private

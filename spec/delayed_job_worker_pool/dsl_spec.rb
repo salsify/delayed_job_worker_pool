@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'spec_helper'
 require 'tempfile'
 
@@ -5,7 +7,7 @@ describe DelayedJobWorkerPool::DSL do
 
   describe ".load" do
     describe "worker pools" do
-      it 'parses worker_group blocks' do
+      it "parses worker_group blocks" do
         options = process_dsl <<-DSL
           worker_group do |g|
             g.workers = 4
@@ -28,7 +30,7 @@ describe DelayedJobWorkerPool::DSL do
       end
     end
 
-    describe 'preload_app' do
+    describe "preload_app" do
       it "parses preload_app without any args" do
         options = process_global_dsl <<-DSL
           preload_app

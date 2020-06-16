@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module DelayedJobWorkerPool
   # Keeps track of worker groups and their workers.
   class Registry
@@ -18,7 +20,7 @@ module DelayedJobWorkerPool
     end
 
     def add_group(name, options)
-      raise GroupAlreadyExists, "Group #{group} already exists" if @groups.key?(name)
+      raise GroupAlreadyExists.new("Group #{group} already exists") if @groups.key?(name)
 
       @groups[name] = {
         options: options,
@@ -39,14 +41,14 @@ module DelayedJobWorkerPool
     end
 
     def worker_pids
-      @groups.values.flat_map{ |v| v[:pids] }
+      @groups.values.flat_map { |v| v[:pids] }
     end
 
     def group(pid)
       @groups.each do |name, group|
         return name if group[:pids].include?(pid)
       end
-      raise GroupNotFound, "No group found for PID #{pid}"
+      raise GroupNotFound.new("No group found for PID #{pid}")
     end
 
     private
@@ -55,7 +57,7 @@ module DelayedJobWorkerPool
       match = @groups[name]
       return match unless match.nil?
 
-      raise GroupDoesNotExist, "No group with name #{name.inspect} found"
+      raise GroupDoesNotExist.new("No group with name #{name.inspect} found")
     end
   end
 end

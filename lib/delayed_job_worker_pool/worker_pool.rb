@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'fcntl'
 require 'socket'
 
@@ -62,6 +64,7 @@ module DelayedJobWorkerPool
     def log_uninheritable_threads
       Thread.list.each do |t|
         next if t == Thread.current
+
         if t.respond_to?(:backtrace)
           log("WARNING: Thread will not be inherited by workers: #{t.inspect} - #{t.backtrace ? t.backtrace.first : ''}")
         else
@@ -155,7 +158,7 @@ module DelayedJobWorkerPool
       invoke_callback(:on_worker_boot, worker_info(Process.pid, group))
 
       DelayedJobWorkerPool::Worker.run(worker_options(Process.pid, group))
-    rescue => e
+    rescue StandardError => e
       log("Worker failed with error: #{e.message}\n#{e.backtrace.join("\n")}")
       exit(1)
     end
@@ -194,9 +197,7 @@ module DelayedJobWorkerPool
     end
 
     def wait_for_signal(timeout)
-      if IO.select([pending_signal_read_pipe], [], [], timeout)
-        drain_pipe(pending_signal_read_pipe)
-      end
+      drain_pipe(pending_signal_read_pipe) if IO.select([pending_signal_read_pipe], [], [], timeout)
     end
 
     def drain_pipe(pipe)

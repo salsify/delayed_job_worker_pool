@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'spec_helper'
 require 'open3'
 require 'active_record'
@@ -9,7 +11,7 @@ describe DelayedJobWorkerPool do
   let(:config_file) { config_file_path('preload_app.rb') }
   let(:worker_pool_env) do
     make_worker_pool_env
-      .merge({'NUM_WORKERS' => '1', 'QUEUES' => 'active'})
+      .merge({ 'NUM_WORKERS' => '1', 'QUEUES' => 'active' })
   end
 
   before(:all) do
@@ -28,7 +30,7 @@ describe DelayedJobWorkerPool do
     FileUtils.remove_dir(jobs_dir, true)
   end
 
-  shared_examples 'runs jobs on active queues' do
+  shared_examples "runs jobs on active queues" do
     specify do
       inactive_job_file = "#{jobs_dir}/inactive.txt"
       queue_create_file_job(inactive_job_file, queue: 'inactive')
@@ -37,51 +39,51 @@ describe DelayedJobWorkerPool do
       queue_create_file_job(active_job_file, queue: 'active')
 
       Wait.for('job completed') do
-        File.exists?(active_job_file)
+        File.exist?(active_job_file)
       end
 
-      expect(File.exists?(inactive_job_file)).to be_falsey
+      expect(File).not_to exist(inactive_job_file)
     end
   end
 
-  it_behaves_like 'runs jobs on active queues'
+  it_behaves_like "runs jobs on active queues"
 
-  it 'invokes after_preload_app, on_worker_boot, and after_worker_boot callbacks' do
+  it "invokes after_preload_app, on_worker_boot, and after_worker_boot callbacks" do
     worker_pids = wait_for_children_booted
     expect(worker_pids.size).to eq 1
 
     wait_for_num_log_lines(master_callback_log, 1 + worker_pids.size)
     worker_pid = worker_pids.first
     expect(parse_callback_log(master_callback_log)).to eq [
-        { callback: 'after_preload_app', pid: master_pid },
-        {
-            callback: 'after_worker_boot',
-            pid: master_pid,
-            worker_pid: worker_pid,
-            worker_name: expected_worker_name(worker_pid),
-            worker_group: 'default'
-        }
+      { callback: 'after_preload_app', pid: master_pid },
+      {
+          callback: 'after_worker_boot',
+          pid: master_pid,
+          worker_pid: worker_pid,
+          worker_name: expected_worker_name(worker_pid),
+          worker_group: 'default'
+      }
     ]
 
     wait_for_num_log_lines(worker_callback_log, 1)
     expect(parse_callback_log(worker_callback_log)).to eq [
-        {
-            callback: 'on_worker_boot',
-            pid: worker_pid,
-            worker_pid: worker_pid,
-            worker_name: expected_worker_name(worker_pid),
-            worker_group: 'default'
-        }
+      {
+          callback: 'on_worker_boot',
+          pid: worker_pid,
+          worker_pid: worker_pid,
+          worker_name: expected_worker_name(worker_pid),
+          worker_group: 'default'
+      }
     ]
   end
 
-  context 'when the app is not preloaded' do
+  context "when the app is not preloaded" do
     let(:config_file) { config_file_path('postload_app.rb') }
 
-    it_behaves_like 'runs jobs on active queues'
+    it_behaves_like "runs jobs on active queues"
   end
 
-  context 'multiple worker groups' do
+  context "multiple worker groups" do
     let(:worker_pool_env) do
       make_worker_pool_env.merge(
         {
@@ -93,22 +95,22 @@ describe DelayedJobWorkerPool do
 
     let(:config_file) { config_file_path('multiple_groups.rb') }
 
-    context 'first group gets its options' do
+    context "first group gets its options" do
       let(:first_group_queues) { 'active' }
       let(:second_group_queues) { 'other' }
 
-      it_behaves_like 'runs jobs on active queues'
+      it_behaves_like "runs jobs on active queues"
     end
 
-    context 'second group gets its options' do
+    context "second group gets its options" do
       let(:first_group_queues) { 'other' }
       let(:second_group_queues) { 'active' }
 
-      it_behaves_like 'runs jobs on active queues'
+      it_behaves_like "runs jobs on active queues"
     end
   end
 
-  context 'when children fail' do
+  context "when children fail" do
     before do
       # Wait until all of the children have started
       worker_pids = wait_for_children_booted
@@ -123,9 +125,9 @@ describe DelayedJobWorkerPool do
       @killed_worker_pids = worker_pids
     end
 
-    it_behaves_like 'runs jobs on active queues'
+    it_behaves_like "runs jobs on active queues"
 
-    it 'invokes after_worker_shutdown callbacks' do
+    it "invokes after_worker_shutdown callbacks" do
       wait_for_children_booted
       wait_for_num_log_lines(master_callback_log, 1 + 3 * @killed_worker_pids.size)
 
@@ -142,7 +144,7 @@ describe DelayedJobWorkerPool do
     end
   end
 
-  it 'exits workers if the master process dies' do
+  it "exits workers if the master process dies" do
     worker_pids = wait_for_children_booted
 
     kill_process(master_pid, 'KILL')
@@ -165,7 +167,11 @@ describe DelayedJobWorkerPool do
   def shutdown_worker_pool
     if process_alive?(master_pid)
       kill_process(master_pid, 'TERM')
-      Process.wait(master_pid) rescue Errno::ECHILD
+      begin
+        Process.wait(master_pid)
+      rescue StandardError
+        Errno::ECHILD
+      end
     end
 
     @master_stdout_err.close if @master_stdout_err
@@ -193,7 +199,7 @@ describe DelayedJobWorkerPool do
   def wait_for_num_log_lines(log, num_lines)
     log_contents = []
     Wait.for("#{log} contains #{num_lines} lines") do
-      if File.exists?(log)
+      if File.exist?(log)
         log_contents = IO.readlines(log)
         log_contents.size == num_lines
       else
@@ -209,7 +215,7 @@ describe DelayedJobWorkerPool do
   end
 
   def child_worker_pids
-    return [] unless File.exists?(worker_state_file)
+    return [] unless File.exist?(worker_state_file)
 
     state = IO.read(worker_state_file)
     state.present? ? JSON.parse(state) : []
@@ -249,9 +255,7 @@ describe DelayedJobWorkerPool do
 
   def setup_test_app_database
     output, status = Open3.capture2e(make_worker_pool_env, 'rake db:drop && rake db:setup', chdir: test_app_root)
-    unless status.success?
-      raise "Failed to setup test app database:\n#{output}"
-    end
+    raise "Failed to setup test app database:\n#{output}" unless status.success?
   end
 
   def log_worker_pool_output(example)
@@ -261,7 +265,7 @@ describe DelayedJobWorkerPool do
     end
   rescue ThreadShutdownException
     # We're being forcefully shutdown
-  rescue => e
+  rescue StandardError => e
     puts "WARNING: Log thread failed: #{e.class} - #{e.message}\n#{e.backtrace.join("\n")}"
   end
 

@@ -1,5 +1,6 @@
-# coding: utf-8
-lib = File.expand_path('../lib', __FILE__)
+# frozen_string_literal: true
+
+lib = File.expand_path('lib', __dir__)
 $LOAD_PATH.unshift(lib) unless $LOAD_PATH.include?(lib)
 require 'delayed_job_worker_pool/version'
 
@@ -21,12 +22,12 @@ Gem::Specification.new do |spec|
 
   spec.add_dependency 'delayed_job', ['>= 3.0', '< 4.2']
 
-  spec.add_development_dependency 'delayed_job_active_record'
   spec.add_development_dependency 'bundler', '~> 2.1'
+  spec.add_development_dependency 'delayed_job_active_record'
+  spec.add_development_dependency 'rails', '>= 4.2', '< 6'
   spec.add_development_dependency 'rake', '~> 10.0'
   spec.add_development_dependency 'rspec', '>= 3.3'
-  spec.add_development_dependency 'sqlite3', '>= 1.3'
-  spec.add_development_dependency 'rails', '>= 4.2', '< 6'
-  spec.add_development_dependency 'sprockets', '< 4'
   spec.add_development_dependency 'salsify_rubocop', '0.85.0'
+  spec.add_development_dependency 'sprockets', '< 4'
+  spec.add_development_dependency 'sqlite3', '>= 1.3'
 end
