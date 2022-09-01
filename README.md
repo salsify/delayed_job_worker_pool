@@ -89,7 +89,7 @@ end
 
 worker_group(:mails) do |g|
   g.workers = 1
-  g.queues = ['mail]
+  g.queues = ['mail']
 end
 
 ```
