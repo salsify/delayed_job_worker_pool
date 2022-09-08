@@ -1,5 +1,8 @@
 # Changelog
 
+### 1.0.0
+* Require Ruby 2.7 or higher.
+
 ### 0.3.0
 * Require Ruby 2.5 or higher.
 * Support for running multiple worker pools on a single node. 
