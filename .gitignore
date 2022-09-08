@@ -9,3 +9,6 @@
 /tmp/
 .rspec
 *.sqlite3
+gemfiles/*.gemfile.lock
+gemfiles/.bundle/*
+spec/dummy/log/

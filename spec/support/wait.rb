@@ -3,7 +3,7 @@
 module Wait
   extend self
 
-  def for(condition_name, max_wait_time: 10, polling_interval: 0.001)
+  def for(condition_name, max_wait_time: 60, polling_interval: 0.001)
     wait_until = Time.now + max_wait_time
     loop do
       return if yield
