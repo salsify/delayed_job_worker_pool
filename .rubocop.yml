@@ -5,4 +5,4 @@ AllCops:
   TargetRubyVersion: 2.5
   Exclude:
     - 'vendor/**/*'
-    - 'gemfiles/vendor/**/*'
+    - 'gemfiles/**/*'
