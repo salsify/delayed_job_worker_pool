@@ -25,7 +25,7 @@ Gem::Specification.new do |spec|
   spec.executables   = ['delayed_job_worker_pool']
   spec.require_paths = ['lib']
 
-  spec.required_ruby_version = '>= 2.5'
+  spec.required_ruby_version = '>= 2.7'
 
   spec.add_dependency 'delayed_job', ['>= 3.0', '< 4.2']
 

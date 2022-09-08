@@ -29,6 +29,8 @@ jobs:
     parameters:
       ruby_version:
         type: string
+      gemfile:
+        type: string
     docker:
       - image: salsify/ruby_ci:<< parameters.ruby_version >>
     environment:
@@ -38,7 +40,7 @@ jobs:
       - checkout
       - restore_cache:
           keys:
-            - v1-gems-ruby-<< parameters.ruby_version >>-{{ checksum "delayed_job_worker_pool.gemspec" }}-{{ checksum "Gemfile" }}
+            - v1-gems-ruby-<< parameters.ruby_version >>-{{ checksum "delayed_job_worker_pool.gemspec" }}-{{ checksum "<< parameters.gemfile >>" }}
             - v1-gems-ruby-<< parameters.ruby_version >>-
       - run:
           name: Install Gems
@@ -48,7 +50,7 @@ jobs:
               bundle clean
             fi
       - save_cache:
-          key: v1-gems-ruby-<< parameters.ruby_version >>-{{ checksum "delayed_job_worker_pool.gemspec" }}-{{ checksum "Gemfile" }}
+          key: v1-gems-ruby-<< parameters.ruby_version >>-{{ checksum "delayed_job_worker_pool.gemspec" }}-{{ checksum "<< parameters.gemfile >>" }}
           paths:
             - "vendor/bundle"
             - "gemfiles/vendor/bundle"
@@ -65,8 +67,11 @@ workflows:
       - test:
           matrix:
             parameters:
+              gemfile:
+                - "gemfiles/rails_6.0.gemfile"
+                - "gemfiles/rails_6.1.gemfile"
+                - "gemfiles/rails_7.0.gemfile"
               ruby_version:
-                - "2.5.8"
-                - "2.6.6"
-                - "2.7.2"
-                - "3.0.0"
+                - "2.7.6"
+                - "3.0.4"
+                - "3.1.2"
