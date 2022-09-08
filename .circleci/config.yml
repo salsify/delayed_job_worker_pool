@@ -35,6 +35,7 @@ jobs:
       - image: salsify/ruby_ci:<< parameters.ruby_version >>
     environment:
       CIRCLE_TEST_REPORTS: "test-results"
+      BUNDLE_GEMFILE: "~/delayed_job_worker_pool/<< parameters.gemfile >>""
     working_directory: ~/delayed_job_worker_pool
     steps:
       - checkout
