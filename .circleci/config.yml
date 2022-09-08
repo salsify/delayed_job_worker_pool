@@ -60,6 +60,8 @@ jobs:
             bundle exec rspec --format RspecJunitFormatter --out $CIRCLE_TEST_REPORTS/rspec/junit.xml --format progress spec
       - store_test_results:
           path: "test-results"
+      - store_artifacts:
+          path: "tmp/log/"
 workflows:
   build:
     jobs:
