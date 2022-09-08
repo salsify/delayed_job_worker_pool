@@ -31,7 +31,6 @@ Gem::Specification.new do |spec|
 
   spec.add_development_dependency 'appraisal'
   spec.add_development_dependency 'bundler', '~> 2.0'
-  spec.add_development_dependency 'database_cleaner'
   spec.add_development_dependency 'delayed_job_active_record'
   spec.add_development_dependency 'rails', '>= 5.2', '< 8'
   spec.add_development_dependency 'rake', '~> 13.0'
